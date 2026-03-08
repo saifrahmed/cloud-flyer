@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fly the Plane - Avoid the Clouds</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #1a1a2e;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    h1 {
+      color: #87CEEB;
+      margin-bottom: 8px;
+      font-size: 1.5rem;
+    }
+    .instructions {
+      color: #aaa;
+      font-size: 0.85rem;
+      margin-bottom: 12px;
+    }
+    canvas {
+      display: block;
+      background: #87CEEB;
+      border-radius: 8px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+    }
+  </style>
+</head>
+<body>
+  <h1>Fly the Plane</h1>
+  <p class="instructions">WASD = fly · ↑↓ = resize mountain · Avoid clouds!</p>
+  <canvas id="game" width="800" height="480"></canvas>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+
+    // Virtual coords: 0-10 (x), 0-6 (y) - matches Python version
+    const W = 10, H = 6;
+    const scaleX = canvas.width / W;
+    const scaleY = canvas.height / H;
+
+    function toScreen(x, y) {
+      return { x: x * scaleX, y: (H - y) * scaleY }; // flip y for screen coords
+    }
+
+    // Mountain
+    let mountainScale = 1.0;
+    const mountainBase = [
+      [0, 0], [2.5, 0], [5, 4], [7.5, 0], [10, 0]
+    ];
+
+    // Clouds: { x, y, speed, puffs: [[dx, dy, r], ...] }
+    const clouds = [
+      { x: 2, y: 4.5, speed: 0.03, puffs: [[-0.3, 0, 0.35], [0, 0.15, 0.4], [0.35, 0, 0.3], [0.15, -0.1, 0.25]] },
+      { x: 6, y: 5.2, speed: 0.025, puffs: [[-0.25, 0.05, 0.3], [0.1, 0.2, 0.35], [0.4, 0, 0.28]] },
+      { x: 8, y: 3.8, speed: 0.02, puffs: [[-0.2, 0, 0.25], [0.15, 0.1, 0.3], [0.45, 0, 0.22]] }
+    ];
+
+    // Plane
+    let planeX = 1.5, planeY = 3;
+    const planeSpeed = 0.25;
+    const planeRadius = 0.22;
+
+    let gameOver = false;
+
+    function getMountainPoints() {
+      return mountainBase.map(([x, y]) => [x, y * mountainScale]);
+    }
+
+    function checkCollision() {
+      for (const cloud of clouds) {
+        for (const [dx, dy, r] of cloud.puffs) {
+          const cx = cloud.x + dx;
+          const cy = cloud.y + dy;
+          const dist = Math.hypot(planeX - cx, planeY - cy);
+          if (dist < r + planeRadius) return true;
+        }
+      }
+      return false;
+    }
+
+    function drawSky() {
+      ctx.fillStyle = '#87CEEB';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function drawMountain() {
+      const points = getMountainPoints();
+      ctx.beginPath();
+      const p0 = toScreen(points[0][0], points[0][1]);
+      ctx.moveTo(p0.x, p0.y);
+      for (let i = 1; i < points.length; i++) {
+        const p = toScreen(points[i][0], points[i][1]);
+        ctx.lineTo(p.x, p.y);
+      }
+      ctx.closePath();
+      ctx.fillStyle = '#8B4513';
+      ctx.fill();
+      ctx.strokeStyle = '#654321';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    function drawClouds() {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+      for (const cloud of clouds) {
+        for (const [dx, dy, r] of cloud.puffs) {
+          const cx = cloud.x + dx;
+          const cy = cloud.y + dy;
+          const s = toScreen(cx, cy);
+          const rx = r * scaleX;
+          const ry = r * scaleY;
+          ctx.beginPath();
+          ctx.ellipse(s.x, s.y, rx, ry, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
+    function drawPlane() {
+      const size = 0.35;
+      const points = [
+        [planeX + size, planeY],
+        [planeX - size * 0.6, planeY + size * 0.5],
+        [planeX - size * 0.6, planeY - size * 0.5]
+      ];
+      ctx.beginPath();
+      const p0 = toScreen(points[0][0], points[0][1]);
+      ctx.moveTo(p0.x, p0.y);
+      for (let i = 1; i < points.length; i++) {
+        const p = toScreen(points[i][0], points[i][1]);
+        ctx.lineTo(p.x, p.y);
+      }
+      ctx.closePath();
+      ctx.fillStyle = '#333333';
+      ctx.fill();
+      ctx.strokeStyle = '#111111';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    function drawGameOver() {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#ff4444';
+      ctx.font = 'bold 36px system-ui';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 20);
+      ctx.font = '20px system-ui';
+      ctx.fillText('You hit a cloud!', canvas.width / 2, canvas.height / 2 + 20);
+    }
+
+    function update() {
+      if (gameOver) return;
+
+      // Move clouds
+      for (const cloud of clouds) {
+        cloud.x += cloud.speed;
+        if (cloud.x > 12) cloud.x = -2;
+      }
+
+      if (checkCollision()) {
+        gameOver = true;
+      }
+    }
+
+    function draw() {
+      drawSky();
+      drawMountain();
+      drawClouds();
+      drawPlane();
+      if (gameOver) drawGameOver();
+    }
+
+    function gameLoop() {
+      update();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (gameOver) return;
+
+      const key = e.key.toLowerCase();
+      if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown'].includes(key)) {
+        e.preventDefault();
+      }
+
+      switch (key) {
+        case 'w':
+          planeY = Math.min(5.5, planeY + planeSpeed);
+          break;
+        case 's':
+          planeY = Math.max(0.5, planeY - planeSpeed);
+          break;
+        case 'a':
+          planeX = Math.max(0.3, planeX - planeSpeed);
+          break;
+        case 'd':
+          planeX = Math.min(9.7, planeX + planeSpeed);
+          break;
+        case 'arrowup':
+          mountainScale = Math.min(3, mountainScale + 0.15);
+          break;
+        case 'arrowdown':
+          mountainScale = Math.max(0.3, mountainScale - 0.15);
+          break;
+      }
+    });
+
+    gameLoop();
+  </script>
+</body>
+</html>
